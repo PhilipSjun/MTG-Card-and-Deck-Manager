@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,6 +22,7 @@ type Card struct {
 	ID            string            `json:"id"`
 	OracleID      string            `json:"oracle_id"`
 	Name          string            `json:"name"`
+	OracleText    string            `json:"oracle_text"`
 	Layout        string            `json:"layout"`
 	ManaCost      string            `json:"mana_cost"`
 	CMC           float64           `json:"cmc"`
@@ -154,19 +156,23 @@ func main() {
 			card.Keywords = make([]string, 0)
 		}
 
+		// Trim whitespace from oracle_text
+		card.OracleText = strings.TrimSpace(card.OracleText)
+
 		_, err = db.Exec(ctx, `
 			INSERT INTO cards (
-				id, oracle_id, name, layout, mana_cost, cmc, type_line, power, toughness,
+				id, oracle_id, name, oracle_text, layout, mana_cost, cmc, type_line, power, toughness,
 				loyalty, defense, colors, color_identity, keywords, set_code, collector_number,
 				rarity, artist, image_uris, legalities, full_data, updated_at
 			) VALUES (
 				$1, $2, $3, $4, $5, $6, $7, $8, $9,
 				$10, $11, $12, $13, $14, $15, $16,
-				$17, $18, $19, $20, $21, $22
+				$17, $18, $19, $20, $21, $22, $23
 			)
 			ON CONFLICT (id) DO UPDATE SET
 				oracle_id = EXCLUDED.oracle_id,
 				name = EXCLUDED.name,
+				oracle_text = EXCLUDED.oracle_text,
 				layout = EXCLUDED.layout,
 				mana_cost = EXCLUDED.mana_cost,
 				cmc = EXCLUDED.cmc,
@@ -186,7 +192,7 @@ func main() {
 				legalities = EXCLUDED.legalities,
 				full_data = EXCLUDED.full_data,
 				updated_at = NOW()
-		`, card.ID, card.OracleID, card.Name, card.Layout, card.ManaCost, card.CMC, card.TypeLine,
+		`, card.ID, card.OracleID, card.Name, card.OracleText, card.Layout, card.ManaCost, card.CMC, card.TypeLine,
 			card.Power, card.Toughness, card.Loyalty, card.Defense,
 			card.Colors, card.ColorIdentity, card.Keywords, card.Set, card.CollectorNum,
 			card.Rarity, card.Artist, card.ImageURIs, card.Legalities, card, time.Now())

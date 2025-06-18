@@ -3,6 +3,7 @@ CREATE TABLE cards (
   id UUID PRIMARY KEY, -- Scryfall ID
   oracle_id UUID NOT NULL, -- Used to group card printings
   name TEXT NOT NULL, -- Printed name
+  oracle_text TEXT,
   layout TEXT,
   mana_cost TEXT,
   cmc REAL, -- Converted mana cost
@@ -56,7 +57,7 @@ CREATE TABLE deck_cards (
 );
 
 
--- Optional: track missing cards
+-- Track missing cards
 CREATE TABLE missing_cards (
   id SERIAL PRIMARY KEY,
   deck_id UUID REFERENCES decks(id),
