@@ -39,6 +39,7 @@ CREATE TABLE decks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   description TEXT,
+  description_gpt_model TEXT,
   commander_name TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -62,3 +63,4 @@ CREATE TABLE missing_cards (
   card_id UUID REFERENCES cards(id),
   reason TEXT CHECK (reason IN ('not_owned', 'in_use_elsewhere'))
 );
+
