@@ -61,7 +61,7 @@ func main() {
 		log.Fatalf("Failed to determine project root: %v", err)
 	}
 
-	// Load environment variables from .env file
+	// Load environment variables from .env.local file
 	envPath := filepath.Join(projectRoot, ".env.local")
 	if err := godotenv.Load(envPath); err != nil {
 		log.Printf("Warning: .env.local file not found at %s: %v", envPath, err)
