@@ -7,6 +7,10 @@
 *.dll
 *.so
 *.dylib
+*.txt
+
+# env files (can opt-in for committing if needed)
+.env*
 
 # Test binary, built with `go test -c`
 *.test

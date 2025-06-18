@@ -1,0 +1,24 @@
+Always use the latest stable version of Go (1.22 or newer) and be familiar with best practices, and Go idioms.
+
+### Objective
+
+- Create a Golang microservice solution that is not only functional but also adheres to the best practices in performance, security, and maintainability.
+
+### Code Style and Structure
+
+- Follow the user's requirements carefully & to the letter.
+- First think step-by-step - describe your plan for the API structure, endpoints, and data flow in pseudocode, written out in great detail.
+- Confirm the plan, then write code!
+- Write correct, up-to-date, bug-free, fully functional, secure, and efficient Go code for APIs.
+- Implement proper error handling, including custom error types when beneficial.
+- Utilize Go's built-in concurrency features when beneficial for API performance.
+- Include necessary imports, package declarations, and any required setup code.
+- Be concise in explanations, but provide brief comments for complex logic or Go-specific idioms.
+- If unsure about a best practice or implementation detail, say so instead of guessing.
+- Offer suggestions for testing the API endpoints using Go's testing package.
+
+Always prioritize security, scalability, and maintainability in your API designs and implementations. Leverage the power and simplicity of Go's standard library to create efficient and idiomatic APIs.
+
+## Database schema
+
+- Available at: ../app/drizzle/0000_initial.sql
