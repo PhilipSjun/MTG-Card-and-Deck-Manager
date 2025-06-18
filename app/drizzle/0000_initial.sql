@@ -56,7 +56,6 @@ CREATE TABLE deck_cards (
   )
 );
 
-
 -- Track missing cards
 CREATE TABLE missing_cards (
   id SERIAL PRIMARY KEY,
@@ -65,3 +64,30 @@ CREATE TABLE missing_cards (
   reason TEXT CHECK (reason IN ('not_owned', 'in_use_elsewhere'))
 );
 
+CREATE TABLE deck_analysis (
+  deck_id UUID PRIMARY KEY REFERENCES decks(id) ON DELETE CASCADE,
+
+  -- Mana and Curve
+  average_mana_value REAL,
+  highest_mana_value INTEGER,
+  mana_curve JSONB,
+
+  -- Card types and land info
+  card_types JSONB,
+  land_count INTEGER,
+  basic_land_count INTEGER,
+  nonbasic_land_count INTEGER,
+
+  -- Colors and interaction
+  color_symbols JSONB,
+  draw_count INTEGER,
+  single_target_removal_count INTEGER,
+  mass_removal_count INTEGER,
+  ramp_count INTEGER,
+  counterspell_count INTEGER,
+  token_count INTEGER,
+  recursion_count INTEGER,
+
+  -- Audit
+  analyzed_at TIMESTAMPTZ DEFAULT NOW()
+);

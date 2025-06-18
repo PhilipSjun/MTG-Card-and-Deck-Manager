@@ -6,8 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
-	"time"
+	"unicode"
 
 	_ "github.com/lib/pq"
 )
@@ -27,7 +28,7 @@ func main() {
 	dbCtx := context.Background()
 
 	rows, err := db.QueryContext(dbCtx, `
-		SELECT d.id
+		SELECT d.id, d.name
 		FROM decks d
 		LEFT JOIN deck_analysis a ON d.id = a.deck_id
 		WHERE a.deck_id IS NULL
@@ -38,28 +39,97 @@ func main() {
 	defer rows.Close()
 
 	for rows.Next() {
-		var deckID string
-		if err := rows.Scan(&deckID); err != nil {
-			log.Println("Error scanning deck id:", err)
+		var deckID, deckName string
+		if err := rows.Scan(&deckID, &deckName); err != nil {
+			log.Println("Error scanning deck:", err)
 			continue
 		}
+		fmt.Printf("Analyzing deck: %s (%s)\n", deckName, deckID)
 		analyzeDeck(dbCtx, db, deckID)
 	}
 }
 
-type cardInfo struct {
-	CMC      float64
-	Types    []string
-	ManaCost string
-	Oracle   string
-	Name     string
-	IsLand   bool
-	IsBasic  bool
-	Quantity int
+func containsWord(text string, pattern string) bool {
+	r := regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(pattern) + `\b`)
+	return r.MatchString(text)
+}
+
+func containsAnyWord(text string, words ...string) bool {
+	for _, w := range words {
+		if containsWord(text, w) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsAnyPhrase(text string, phrases ...string) bool {
+	for _, phrase := range phrases {
+		if strings.Contains(text, phrase) {
+			return true
+		}
+	}
+	return false
+}
+
+func isDrawEffect(text string) bool {
+	return containsAnyPhrase(text,
+		"draw a card", "you may draw", "then draw", "draw two", "draw x", "investigate")
+}
+
+func isRampEffect(text string) bool {
+	return containsAnyPhrase(text,
+		"add {", "add one mana", "add two mana", "add three mana", "add an amount of mana",
+		"search your library for a land", "create a treasure", "mana pool", "untap target land",
+		"put a land card")
+}
+
+func isSingleTargetRemoval(text string) bool {
+	return containsAnyPhrase(text,
+		"destroy target", "exile target", "damage to target", "fight target creature",
+		"choose one or both")
+}
+
+func isMassRemoval(text string) bool {
+	return containsAnyPhrase(text,
+		"each creature", "all creatures", "all permanents", "destroy all", "exile all",
+		"sacrifice all", "each opponent sacrifices")
+}
+
+func isCounterspell(text string) bool {
+	return containsAnyPhrase(text,
+		"counter target", "unless its controller pays")
+}
+
+func isTokenGenerator(text string) bool {
+	return containsAnyPhrase(text,
+		"create a", "create a copy of", "token")
+}
+
+func isRecursionEffect(text string) bool {
+	return containsAnyPhrase(text,
+		"return target", "from your graveyard", "escape", "retrace", "unearth", "eternalize",
+		"disturb", "embalm", "delve", "undying", "persist")
+}
+
+func countManaPips(manaCost string) (int, map[string]int) {
+	symbolCounts := map[string]int{}
+	total := 0
+	tokens := regexp.MustCompile(`\{(.*?)\}`).FindAllStringSubmatch(manaCost, -1)
+	for _, token := range tokens {
+		contents := strings.ToUpper(token[1])
+		parts := strings.Split(contents, "/")
+		for _, part := range parts {
+			if part != "" {
+				symbolCounts[part]++
+				total++
+			}
+		}
+	}
+	return total, symbolCounts
 }
 
 func analyzeDeck(ctx context.Context, db *sql.DB, deckID string) {
-	colorSymbols := map[string]int{}
 	drawCount := 0
 	singleTargetRemoval := 0
 	massRemoval := 0
@@ -67,7 +137,16 @@ func analyzeDeck(ctx context.Context, db *sql.DB, deckID string) {
 	rampCount := 0
 	tokenCount := 0
 	recursionCount := 0
-	fmt.Println("Analyzing deck:", deckID)
+
+	totalCMC := 0.0
+	totalNonLand := 0
+	manaCurve := map[int]int{}
+	colorPips := map[string]int{"W": 0, "U": 0, "B": 0, "R": 0, "G": 0, "C": 0}
+
+	basicLandCount := 0
+	nonBasicLandCount := 0
+	totalLandCount := 0
+	typeSet := map[string]bool{}
 
 	query := `
 		SELECT c.name, c.cmc, c.type_line, c.mana_cost, c.oracle_text,
@@ -86,114 +165,111 @@ func analyzeDeck(ctx context.Context, db *sql.DB, deckID string) {
 	}
 	defer rows.Close()
 
-	var cards []cardInfo
 	for rows.Next() {
-		var card cardInfo
-		var typeLine string
-		if err := rows.Scan(&card.Name, &card.CMC, &typeLine, &card.ManaCost, &card.Oracle, &card.IsLand, &card.IsBasic, &card.Quantity); err != nil {
+		var name, typeLine, manaCost, oracle string
+		var cmc float64
+		var isLand, isBasic bool
+		var quantity int
+		if err := rows.Scan(&name, &cmc, &typeLine, &manaCost, &oracle, &isLand, &isBasic, &quantity); err != nil {
 			log.Println("Scan error:", err)
 			continue
 		}
-		card.Types = parseTypes(typeLine)
-		cards = append(cards, card)
-	}
 
-	if len(cards) == 0 {
-		log.Println("No cards found for deck:", deckID)
-		return
-	}
+		oracle = strings.ToLower(oracle)
 
-	var cmcSum float64
-	manaCurve := map[string]int{}
-	cardTypes := map[string]int{}
-	landCount := 0
-	basicLands := 0
-	highestCMC := 0.0
-	cardTotal := 0
+		if isDrawEffect(oracle) {
+			drawCount += quantity
+		}
+		if isRampEffect(oracle) && !isLand {
+			rampCount += quantity
+		}
+		if isSingleTargetRemoval(oracle) {
+			singleTargetRemoval += quantity
+		}
+		if isMassRemoval(oracle) {
+			massRemoval += quantity
+		}
+		if isCounterspell(oracle) {
+			counterSpellCount += quantity
+		}
+		if isTokenGenerator(oracle) {
+			tokenCount += quantity
+		}
+		if isRecursionEffect(oracle) {
+			recursionCount += quantity
+		}
 
-	for _, c := range cards {
-		cardTotal += c.Quantity
-		if !c.IsLand {
-			cmcSum += c.CMC * float64(c.Quantity)
-			if c.CMC > highestCMC {
-				highestCMC = c.CMC
-			}
-
-			var k string
-			if c.CMC >= 6 {
-				k = "6+"
+		if isLand {
+			totalLandCount += quantity
+			if isBasic {
+				basicLandCount += quantity
 			} else {
-				k = fmt.Sprintf("%.0f", c.CMC)
+				nonBasicLandCount += quantity
 			}
-			manaCurve[k] += c.Quantity
+			continue
 		}
 
-		for _, t := range c.Types {
-			cardTypes[t] += c.Quantity
-		}
+		totalCMC += cmc * float64(quantity)
+		totalNonLand += quantity
+		manaCurve[int(cmc)] += quantity
 
-		if c.IsLand {
-			landCount += c.Quantity
-			if c.IsBasic {
-				basicLands += c.Quantity
+		tokens := regexp.MustCompile(`\{(.*?)\}`).FindAllStringSubmatch(manaCost, -1)
+		for _, token := range tokens {
+			contents := strings.ToUpper(token[1])
+			parts := strings.Split(contents, "/")
+			for _, part := range parts {
+				switch part {
+				case "W", "U", "B", "R", "G", "C":
+					colorPips[part] += quantity
+				}
 			}
 		}
 
-		for _, symbol := range []string{"W", "U", "B", "R", "G"} {
-			count := strings.Count(c.ManaCost, "{"+symbol+"}")
-			colorSymbols[symbol] += count * c.Quantity
-		}
-
-		oracle := strings.ToLower(c.Oracle)
-		if strings.Contains(oracle, "draw a card") {
-			drawCount += c.Quantity
-		}
-		if strings.Contains(oracle, "each creature") || strings.Contains(oracle, "all creatures") || strings.Contains(oracle, "all permanents") {
-			massRemoval += c.Quantity
-		} else if strings.Contains(oracle, "destroy") || strings.Contains(oracle, "exile") || strings.Contains(oracle, "counter target") {
-			singleTargetRemoval += c.Quantity
-		}
-		if strings.Contains(oracle, "counter target") {
-			counterSpellCount += c.Quantity
-		}
-		if !c.IsLand && (strings.Contains(oracle, "add {") || strings.Contains(oracle, "search your library for a land") || strings.Contains(oracle, "create a treasure")) {
-			rampCount += c.Quantity
-		}
-		if strings.Contains(oracle, "create a") && strings.Contains(oracle, "token") {
-			tokenCount += c.Quantity
-		}
-		if strings.Contains(oracle, "return target") && (strings.Contains(oracle, "graveyard") || strings.Contains(oracle, "hand")) {
-			recursionCount += c.Quantity
+		for _, t := range strings.Split(typeLine, " ") {
+			if len(t) > 0 && unicode.IsUpper(rune(t[0])) {
+				typeSet[t] = true
+			}
 		}
 	}
 
-	avgCMC := cmcSum / float64(cardTotal)
-	jsonColors, _ := json.Marshal(colorSymbols)
-	jsonCurve, _ := json.Marshal(manaCurve)
-	jsonTypes, _ := json.Marshal(cardTypes)
+	avgMana := 0.0
+	if totalNonLand > 0 {
+		avgMana = totalCMC / float64(totalNonLand)
+	}
+
+	types := make([]string, 0, len(typeSet))
+	for t := range typeSet {
+		types = append(types, t)
+	}
+
+	typesJSON, _ := json.Marshal(types)
+	manaCurveJSON, _ := json.Marshal(manaCurve)
+	colorPipsJSON, _ := json.Marshal(colorPips)
 
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO deck_analysis (
-			deck_id, average_mana_value, highest_mana_value, mana_curve,
-			card_types, land_count, basic_land_count, nonbasic_land_count,
-			color_symbols, draw_count, single_target_removal_count, mass_removal_count,
-			ramp_count, counterspell_count, token_count, recursion_count, analyzed_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-	`,
-		deckID, avgCMC, int(highestCMC), jsonCurve, jsonTypes,
-		landCount, basicLands, landCount-basicLands, jsonColors,
-		drawCount, singleTargetRemoval,
-		massRemoval, rampCount, counterSpellCount, tokenCount, recursionCount, time.Now())
-
+			deck_id, draw_count, ramp_count, single_target_removal_count, mass_removal_count,
+			counterspell_count, token_count, recursion_count,
+			average_mana_value, mana_curve, highest_mana_value,
+			card_types, basic_land_count, nonbasic_land_count, land_count, color_symbols
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+		ON CONFLICT (deck_id) DO NOTHING
+	`, deckID, drawCount, rampCount, singleTargetRemoval, massRemoval, counterSpellCount, tokenCount, recursionCount,
+		avgMana, string(manaCurveJSON), highestMana(manaCurve), string(typesJSON), basicLandCount, nonBasicLandCount, totalLandCount, string(colorPipsJSON))
 	if err != nil {
 		log.Println("Insert failed:", err)
-	} else {
-		fmt.Println("Deck analysis saved.")
 	}
+
+	fmt.Printf("Draw: %d, Ramp: %d, Removal: %d/%d, Counterspells: %d, Tokens: %d, Recursion: %d\n",
+		drawCount, rampCount, singleTargetRemoval, massRemoval, counterSpellCount, tokenCount, recursionCount)
 }
 
-func parseTypes(typeLine string) []string {
-	types := strings.Split(typeLine, " — ")[0]
-	parts := strings.Fields(types)
-	return parts
+func highestMana(curve map[int]int) int {
+	high := 0
+	for k := range curve {
+		if k > high {
+			high = k
+		}
+	}
+	return high
 }
