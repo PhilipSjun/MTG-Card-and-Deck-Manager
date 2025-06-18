@@ -91,17 +91,33 @@ func importDeck(ctx context.Context, db *pgxpool.Pool, filePath string) error {
 		sections = append(sections, DeckEntry{CardName: cardName, Quantity: qty, Section: currentSection})
 	}
 
-	// Check if deck already exists
+	// Extract commander names for deck table
+	commanderNames := make([]string, 0)
+	for _, entry := range sections {
+		if entry.Section == "commander" {
+			commanderNames = append(commanderNames, entry.CardName)
+		}
+	}
+	commanderField := strings.Join(commanderNames, " // ")
+
+	// Check if deck already exists and compare timestamps
 	var existingDeckID string
-	err = db.QueryRow(ctx, `SELECT id FROM decks WHERE name = $1 LIMIT 1`, deckName).Scan(&existingDeckID)
+	var existingCreatedAt time.Time
+	err = db.QueryRow(ctx, `SELECT id, created_at FROM decks WHERE name = $1 LIMIT 1`, deckName).Scan(&existingDeckID, &existingCreatedAt)
 	if err == nil {
+		fileInfo, statErr := os.Stat(filePath)
+		if statErr == nil && fileInfo.ModTime().Before(existingCreatedAt) {
+			fmt.Println("Skipping deck (newer version already in database):", deckName)
+			return nil
+		}
 		// Deck exists, clear old data
 		_, _ = db.Exec(ctx, `DELETE FROM missing_cards WHERE deck_id = $1`, existingDeckID)
 		_, _ = db.Exec(ctx, `DELETE FROM deck_cards WHERE deck_id = $1`, existingDeckID)
+		_, _ = db.Exec(ctx, `UPDATE decks SET commander_name = $1, created_at = $2 WHERE id = $3`, commanderField, time.Now(), existingDeckID)
 		deckID = uuid.MustParse(existingDeckID)
 	} else {
 		// Insert new deck
-		_, err = db.Exec(ctx, `INSERT INTO decks (id, name, created_at) VALUES ($1, $2, $3)`, deckID, deckName, time.Now())
+		_, err = db.Exec(ctx, `INSERT INTO decks (id, name, commander_name, created_at) VALUES ($1, $2, $3, $4)`, deckID, deckName, commanderField, time.Now())
 		if err != nil {
 			return fmt.Errorf("failed to create deck: %w", err)
 		}
