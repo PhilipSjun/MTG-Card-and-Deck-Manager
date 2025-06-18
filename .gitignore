@@ -8,6 +8,7 @@
 *.so
 *.dylib
 *.txt
+*.json
 
 # env files (can opt-in for committing if needed)
 .env*
