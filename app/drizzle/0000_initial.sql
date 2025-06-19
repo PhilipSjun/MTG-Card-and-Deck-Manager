@@ -1,5 +1,5 @@
 -- All MTG cards
-CREATE TABLE cards (
+CREATE TABLE IF NOT EXISTS cards (
   id UUID PRIMARY KEY, -- Scryfall ID
   oracle_id UUID NOT NULL, -- Used to group card printings
   name TEXT NOT NULL, -- Printed name
@@ -26,7 +26,7 @@ CREATE TABLE cards (
 );
 
 -- Your personal collection
-CREATE TABLE owned_cards (
+CREATE TABLE IF NOT EXISTS owned_cards (
   id SERIAL PRIMARY KEY,
   card_id UUID REFERENCES cards(id),
   quantity INTEGER NOT NULL,
@@ -36,7 +36,7 @@ CREATE TABLE owned_cards (
 );
 
 -- Commander decks
-CREATE TABLE decks (
+CREATE TABLE IF NOT EXISTS decks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   description TEXT,
@@ -46,7 +46,7 @@ CREATE TABLE decks (
 );
 
 -- Cards in a deck, including mainboard, sideboard, maybeboard, and commander
-CREATE TABLE deck_cards (
+CREATE TABLE IF NOT EXISTS deck_cards (
   id SERIAL PRIMARY KEY,
   deck_id UUID REFERENCES decks(id) ON DELETE CASCADE,
   card_id UUID REFERENCES cards(id),
@@ -57,7 +57,7 @@ CREATE TABLE deck_cards (
 );
 
 -- Track missing cards
-CREATE TABLE missing_cards (
+CREATE TABLE IF NOT EXISTS missing_cards (
   id SERIAL PRIMARY KEY,
   deck_id UUID REFERENCES decks(id),
   card_id UUID REFERENCES cards(id),
@@ -65,7 +65,7 @@ CREATE TABLE missing_cards (
 );
 
 -- Track the card combos in a deck
-CREATE TABLE deck_combos (
+CREATE TABLE IF NOT EXISTS deck_combos (
   id SERIAL PRIMARY KEY,
   deck_id UUID REFERENCES decks(id) ON DELETE CASCADE,
   combo_id TEXT NOT NULL,
@@ -81,7 +81,7 @@ CREATE TABLE deck_combos (
 );
 
 -- Various deck metrics, analysis, etc.
-CREATE TABLE deck_analysis (
+CREATE TABLE IF NOT EXISTS deck_analysis (
   deck_id UUID PRIMARY KEY REFERENCES decks(id) ON DELETE CASCADE,
 
   -- Mana and Curve
@@ -110,7 +110,7 @@ CREATE TABLE deck_analysis (
 );
 
 -- Estimation of the power level bracket a deck is in
-CREATE TABLE bracket_estimation (
+CREATE TABLE IF NOT EXISTS bracket_estimation (
     deck_id UUID PRIMARY KEY REFERENCES decks(id),
     bracket_tag TEXT,
     game_changer_cards JSONB,
