@@ -1,9 +1,13 @@
 package cards
 
-import "mtgmanager/internal/db"
+import (
+	"database/sql"
+
+	"github.com/admin/mtg-card-manager/internal/db"
+)
 
 type Service struct {
-	DB *db.DB
+	DB *sql.DB
 }
 
 func (s *Service) GetCard(id int) (*db.Card, error) {

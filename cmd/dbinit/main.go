@@ -3,7 +3,8 @@ package main
 import (
 	"flag"
 	"log"
-	"mtgmanager/internal/dbinit"
+
+	"github.com/admin/mtg-card-manager/internal/dbinit"
 )
 
 func main() {

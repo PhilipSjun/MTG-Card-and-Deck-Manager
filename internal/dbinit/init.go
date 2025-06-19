@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"mtgmanager/internal/config"
+	"github.com/admin/mtg-card-manager/internal/config"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -34,6 +34,9 @@ func checkTableExists(ctx context.Context, conn *pgx.Conn, tableName string) (bo
 
 func dropTables(ctx context.Context, conn *pgx.Conn) error {
 	_, err := conn.Exec(ctx, `
+		DROP TABLE IF EXISTS bracket_estimation CASCADE;
+		DROP TABLE IF EXISTS deck_analysis CASCADE;
+		DROP TABLE IF EXISTS deck_combos CASCADE;
 		DROP TABLE IF EXISTS missing_cards CASCADE;
 		DROP TABLE IF EXISTS deck_cards CASCADE;
 		DROP TABLE IF EXISTS decks CASCADE;
@@ -75,7 +78,10 @@ func Run(forceReset bool) error {
 		}
 	}
 
-	schemaPath := filepath.Join(projectRoot, "app", "drizzle", "0000_initial.sql")
+	schemaPath := cfg.SchemaPath
+	if schemaPath == "" {
+		schemaPath = filepath.Join(projectRoot, "app", "drizzle", "0000_initial.sql")
+	}
 	schema, err := os.ReadFile(schemaPath)
 	if err != nil {
 		return fmt.Errorf("unable to read schema file: %w", err)

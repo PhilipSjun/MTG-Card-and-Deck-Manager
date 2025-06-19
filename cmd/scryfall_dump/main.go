@@ -2,7 +2,8 @@ package main
 
 import (
 	"log"
-	"mtgmanager/internal/scryfall"
+
+	"github.com/admin/mtg-card-manager/internal/scryfall"
 )
 
 func main() {

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"mtgmanager/internal/config"
+	"github.com/admin/mtg-card-manager/internal/config"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
