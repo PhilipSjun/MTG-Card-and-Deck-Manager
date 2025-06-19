@@ -64,6 +64,23 @@ CREATE TABLE missing_cards (
   reason TEXT CHECK (reason IN ('not_owned', 'in_use_elsewhere'))
 );
 
+-- Track the card combos in a deck
+CREATE TABLE deck_combos (
+  id SERIAL PRIMARY KEY,
+  deck_id UUID REFERENCES decks(id) ON DELETE CASCADE,
+  combo_id TEXT NOT NULL,
+  cards TEXT[] NOT NULL,
+  description TEXT,
+  prerequisites TEXT,
+  requires TEXT[],
+  produces TEXT[],
+  steps TEXT,
+  results TEXT,
+  inclusion_bucket TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Various deck metrics, analysis, etc.
 CREATE TABLE deck_analysis (
   deck_id UUID PRIMARY KEY REFERENCES decks(id) ON DELETE CASCADE,
 
@@ -91,3 +108,25 @@ CREATE TABLE deck_analysis (
   -- Audit
   analyzed_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Estimation of the power level bracket a deck is in
+CREATE TABLE bracket_estimation (
+    deck_id UUID PRIMARY KEY REFERENCES decks(id),
+    bracket_tag TEXT,
+    game_changer_cards JSONB,
+    mass_land_denial_cards JSONB,
+    mass_land_denial_templates JSONB,
+    mass_land_denial_combos JSONB,
+    extra_turn_cards JSONB,
+    extra_turn_templates JSONB,
+    extra_turns_combos JSONB,
+    tutor_cards JSONB,
+    tutor_templates JSONB,
+    lock_combos JSONB,
+    skip_turns_combos JSONB,
+    definitely_early_game_two_card_combos JSONB,
+    arguably_early_game_two_card_combos JSONB,
+    definitely_late_game_two_card_combos JSONB,
+    borderline_late_game_two_card_combos JSONB
+);
+
